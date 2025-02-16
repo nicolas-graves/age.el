@@ -1298,6 +1298,66 @@ function `write-region'."
 	(message "`age-file' disabled"))
     (message "`age-file' already disabled")))
 
+;; Password-store/Passage
+
+;; Trick to make the password-store package optional.
+(autoload 'password-store-dir "password-store")
+(autoload 'password-store--run-show "password-store")
+
+(defvar age-passage-dir (getenv "PASSAGE_DIR"))
+(defvar age-passage-executable (executable-find "passage"))
+
+(defun age-password-store--entry-to-file (entry)
+  "Return file name corresponding to ENTRY.
+
+This is a variant of `password-store--entry-to-file' patched
+to handle `.age' files.  It is provided in the `age.el' package."
+  (concat
+   (expand-file-name entry (password-store-dir)) ".age"))
+
+(defun age-password-store-list (&optional subdir)
+  "List password entries under SUBDIR.
+
+This is a variant of `password-store-list' patched to handle `.age'
+files.  It is provided in the `age.el' package."
+  (unless subdir (setq subdir ""))
+  (let ((dir (expand-file-name subdir (password-store-dir))))
+    (if (file-directory-p dir)
+        (delete-dups
+         (mapcar 'password-store--file-to-entry
+                 (directory-files-recursively
+                  dir ".+\\.age\\'"))))))
+
+(defun age-auth-source-pass--read-entry (entry)
+  "Return a string with the file content of ENTRY.
+
+This is a variant of `auth-source-pass--read-entry' adapted to `.age'
+files.  It is provided in the `age.el' package."
+  (password-store--run-show entry))
+
+;;;###autoload
+(defun age-passage-setup ()
+  "Use `passage' instead of `password-store' to get passwords.
+
+Warning: This function patches some Emacs native functions."
+  (if age-passage-dir
+      (setopt auth-source-pass-filename age-passage-dir)
+    (warn "Unable to read PASSAGE_DIR in user environment.
+Please set it or initialize `age-passage-dir', \
+then run `age-passage-setup' once again."))
+  (if age-passage-executable
+      (setopt password-store-executable age-passage-executable)
+    (warn "Unable to find `passage' executable.
+Please ensure it is available in `exec-path' directories, \
+or set `age-passage-executable' manually, \
+then run `age-passage-setup' once again."))
+  (advice-add 'password-store--entry-to-file
+              :override 'age-password-store--entry-to-file)
+  (advice-add 'password-store-list
+              :override 'age-password-store-list)
+  (advice-add 'auth-source-pass--read-entry
+              :override 'age-auth-source-pass--read-entry))
+
 (provide 'age)
 
 ;;; age.el ends here
